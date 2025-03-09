@@ -1,0 +1,76 @@
+import openai
+import speech_recognition as sr
+from transformers import BlipProcessor, BlipForConditionalGeneration
+import torch
+from PIL import Image
+import requests
+from io import BytesIO
+
+# Set your OpenAI API key (for DALL·E or similar model)
+openai.api_key = 'your-openai-api-key'  # Replace with your actual OpenAI API key
+
+# Speech Recognition to convert audio to text
+def audio_to_text(audio_file):
+    recognizer = sr.Recognizer()
+    
+    # Load the audio file
+    with sr.AudioFile(audio_file) as source:
+        audio = recognizer.record(source)
+    
+    try:
+        # Recognize speech using Google Web Speech API
+        text = recognizer.recognize_google(audio)
+        print("Recognized Speech:", text)
+        return text
+    except sr.UnknownValueError:
+        print("Sorry, could not understand the audio")
+        return None
+    except sr.RequestError as e:
+        print(f"Error with the speech recognition service: {e}")
+        return None
+
+# Generate Image from Text using OpenAI's DALL·E
+def generate_image_from_text(prompt):
+    response = openai.Image.create(
+        prompt=prompt,
+        n=1,
+        size="1024x1024"
+    )
+    
+    # Get the URL of the generated image
+    image_url = response['data'][0]['url']
+    return image_url
+
+# Generate Image from Text using BLIP (a more open-source transformer model)
+def generate_image_from_blip(prompt):
+    processor = BlipProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
+    model = BlipForConditionalGeneration.from_pretrained("Salesforce/blip-image-captioning-base")
+    
+    inputs = processor(text=prompt, return_tensors="pt")
+    out = model.generate(**inputs)
+    image = processor.decode(out[0], skip_special_tokens=True)
+    return image
+
+# Main function to convert audio to image
+def audio_to_image(audio_file):
+    text_prompt = audio_to_text(audio_file)
+    
+    if text_prompt:
+        # Option 1: Use DALL·E (OpenAI API)
+        print(f"Generating image from text prompt: {text_prompt}")
+        image_url = generate_image_from_text(text_prompt)
+        response = requests.get(image_url)
+        img = Image.open(BytesIO(response.content))
+        img.show()
+
+        # Option 2: Use BLIP (local Transformer model)
+        # image = generate_image_from_blip(text_prompt)
+        # print(image)
+        # You can save or display the image based on your needs
+    else:
+        print("No valid text prompt to generate an image.")
+
+# Example Usage
+if __name__ == "__main__":
+    audio_file = "your_audio_file.wav"  # Replace with your audio file path
+    audio_to_image(audio_file)
